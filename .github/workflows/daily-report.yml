@@ -1,6 +1,8 @@
 name: 每日股市推送
 
 on:
+  push:
+    branches: [main]
   schedule:
     # 北京时间 16:00 = UTC 08:00（仅工作日）
     - cron: '0 8 * * 1-5'
