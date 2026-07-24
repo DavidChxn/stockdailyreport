@@ -1,0 +1,72 @@
+name: 每日股市推送
+
+on:
+  schedule:
+    # 北京时间 16:00 = UTC 08:00（仅工作日）
+    - cron: '0 8 * * 1-5'
+  # 允许手动触发
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  generate-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 生成报告
+        id: generate
+        run: |
+          mkdir -p output
+          python generate_report.py --output output
+          echo "report_file=$(ls output/report_*.html | head -1)" >> $GITHUB_OUTPUT
+
+      - name: 发送企业微信通知
+        if: env.WECOM_WEBHOOK != ''
+        env:
+          WECOM_WEBHOOK: ${{ secrets.WECOM_WEBHOOK }}
+        run: |
+          REPORT_URL="${{ steps.deployment.outputs.page_url }}"
+          curl -s "$WECOM_WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"msgtype\": \"markdown\",
+              \"markdown\": {
+                \"content\": \"## 📊 每日股市推送已更新\n> 日期：$(date +%Y年%m月%d日)\n> 股票池：17只A股半导体标的\n> 报告地址：[点击查看]($REPORT_URL)\n\n数据来源：腾讯自选股 | 自动生成\"
+              }
+            }"
+
+      - name: 配置 GitHub Pages
+        uses: actions/configure-pages@v4
+
+      - name: 上传构建产物
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'output'
+
+      - name: 部署到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
